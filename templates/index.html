@@ -1,1 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SquawkMap</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; background: #0D1F3C; color: white; height: 100vh; display: flex; flex-direction: column; }
+    .header { background: #0A7EA4; padding: 14px 24px; font-size: 20px; font-weight: bold; letter-spacing: 1px; flex-shrink: 0; display: flex; align-items: center; justify-content: space-between; }
+    .header-status { font-size: 12px; font-weight: normal; color: #c8dce8; }
+    .filter-bar { display: flex; align-items: center; gap: 12px; padding: 14px 24px; background: #0D1F3C; flex-shrink: 0; }
+    select, button { padding: 9px 16px; border-radius: 6px; border: none; font-size: 14px; cursor: pointer; }
+    select { background: #1E3A5F; color: white; min-width: 200px; }
+    button { background: #0A7EA4; color: white; font-weight: bold; }
+    button:hover { background: #086a8a; }
+    .stats-bar { background: #1E3A5F; padding: 10px 24px; font-size: 14px; display: none; gap: 24px; flex-shrink: 0; align-items: center; }
+    .stat { display: flex; flex-direction: column; }
+    .stat-label { font-size: 11px; color: #7EB8D0; text-transform: uppercase; }
+    .stat-value { font-size: 20px; font-weight: bold; color: #0A7EA4; }
+    .last-updated { margin-left: auto; font-size: 11px; color: #7EB8D0; }
+    .loading-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #7EB8D0; margin-left: 8px; animation: pulse 1.5s infinite; }
+    .loading-dot.active { background: #0A7EA4; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+    .main { display: flex; flex: 1; overflow: hidden; }
+    .map-wrapper { flex: 1; position: relative; overflow: hidden; }
+    #map { width: 100%; height: 100%; }
+    .placeholder { background: #1E3A5F; height: 100%; display: flex; align-items: center; justify-content: center; color: #7EB8D0; font-size: 15px; text-align: center; padding: 40px; }
+    .side-panel { width: 320px; background: #0D1F3C; border-left: 2px solid #0A7EA4; overflow-y: auto; flex-shrink: 0; }
+    .panel-section { border-bottom: 1px solid #1E3A5F; padding: 16px; }
+    .panel-title { font-size: 13px; font-weight: bold; color: #0A7EA4; text-transform: uppercase; margin-bottom: 12px; letter-spacing: 1px; }
+    .field-row { display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 6px; }
+    .field-label { color: #7EB8D0; }
+    .field-value { color: white; font-weight: bold; }
+    .empty-panel { color: #7EB8D0; font-size: 13px; text-align: center; padding: 20px 0; }
+    .flagged-item { background: #1E3A5F; border-left: 3px solid #EF4444; border-radius: 4px; padding: 8px 10px; margin-bottom: 8px; font-size: 12px; }
+    .flagged-item .reason { color: #EF4444; font-weight: bold; margin-bottom: 2px; }
+    .flagged-item .detail { color: #7EB8D0; }
+    .log-item { background: #1E3A5F; border-radius: 4px; padding: 8px 10px; margin-bottom: 6px; font-size: 12px; }
+    .log-item .log-icao { font-weight: bold; color: #0A7EA4; }
+    .log-item .log-detail { color: #7EB8D0; margin-top: 2px; }
+    .clear-btn { background: #7f1d1d; color: white; border: none; padding: 7px 14px; border-radius: 5px; font-size: 12px; cursor: pointer; width: 100%; margin-top: 8px; }
+    .clear-btn:hover { background: #991b1b; }
+    .status-input { display: flex; gap: 8px; margin-bottom: 10px; }
+    .status-input input { flex: 1; background: #1E3A5F; color: white; border: 1px solid #0A7EA4; border-radius: 5px; padding: 7px 10px; font-size: 13px; }
+    .status-input button { padding: 7px 12px; font-size: 12px; }
+    .status-result { font-size: 13px; padding: 8px 10px; background: #1E3A5F; border-radius: 5px; color: #7EB8D0; }
+    .scenario-box { background: #1E3A5F; border-radius: 6px; padding: 12px; font-size: 13px; margin-bottom: 8px; }
+    .scenario-title { font-weight: bold; color: #0A7EA4; margin-bottom: 6px; }
+    .scenario-desc { color: #c8dce8; margin-bottom: 10px; line-height: 1.5; }
+    .scenario-choices { display: flex; flex-direction: column; gap: 6px; }
+    .choice-btn { background: #0D1F3C; color: white; border: 1px solid #0A7EA4; border-radius: 5px; padding: 7px 10px; font-size: 12px; cursor: pointer; text-align: left; }
+    .choice-btn:hover { background: #0A7EA4; }
+    .scenario-feedback { margin-top: 8px; padding: 8px; border-radius: 5px; font-size: 12px; }
+    .feedback-correct { background: #14532d; color: #86efac; }
+    .feedback-incorrect { background: #7f1d1d; color: #fca5a5; }
+    .next-btn { background: #0A7EA4; color: white; border: none; padding: 7px 14px; border-radius: 5px; font-size: 12px; cursor: pointer; width: 100%; margin-top: 8px; }
+    .error-bar { background: #7f1d1d; color: #fca5a5; padding: 10px 24px; font-size: 13px; flex-shrink: 0; }
+  </style>
+</head>
+<body>
 
+<div class="header">
+  <span>✈ SquawkMap — Live Flight Tracker</span>
+  <span class="header-status" id="header-status"></span>
+</div>
+
+{% if error %}
+<div class="error-bar">{{ error }}</div>
+{% endif %}
+
+<form method="POST">
+  <div class="filter-bar">
+    <select name="country" id="country-select">
+      <option value="">Select a country...</option>
+      {% for country in countries %}
+        <option value="{{ country }}" {% if country == selected_country %}selected{% endif %}>{{ country }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit">Track Flights</button>
+  </div>
+</form>
+
+<div class="stats-bar" id="stats-bar">
+  <div class="stat"><span class="stat-label">Total</span><span class="stat-value" id="stat-total">0</span></div>
+  <div class="stat"><span class="stat-label">Airborne</span><span class="stat-value" id="stat-airborne">0</span></div>
+  <div class="stat"><span class="stat-label">On Ground</span><span class="stat-value" id="stat-ground">0</span></div>
+  <div class="stat"><span class="stat-label">Anomalies</span><span class="stat-value" id="stat-anomalies" style="color:#EF4444;">0</span></div>
+  <span class="last-updated" id="last-updated"></span>
+  <span class="loading-dot" id="loading-dot"></span>
+</div>
+
+<div class="main">
+  <div class="map-wrapper">
+    {% if selected_country %}
+      <div id="map"></div>
+    {% else %}
+      <div class="placeholder">Select a country above and click Track Flights to see live flights.</div>
+    {% endif %}
+  </div>
+
+  <div class="side-panel">
+    <div class="panel-section">
+      <div class="panel-title">✈ Flight Details</div>
+      <div id="flight-details"><div class="empty-panel">Click a flight marker to see details.</div></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-title">🛡 Cyber Panel</div>
+      <div id="flagged-list"><div class="empty-panel">No anomalies detected.</div></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-title">🎯 Cyber Scenario</div>
+      <div id="scenario-box"><div class="empty-panel">Load a country to start a scenario.</div></div>
+    </div>
+    <div class="panel-section">
+      <div class="panel-title">📋 Flight Click Logs</div>
+      <div id="log-list"><div class="empty-panel">No flights clicked yet.</div></div>
+      <button class="clear-btn" onclick="clearLogs()">Clear Logs</button>
+    </div>
+    <div class="panel-section">
+      <div class="panel-title">🔍 Flight Status Checker</div>
+      <div class="status-input">
+        <input type="text" id="icao-input" placeholder="Enter ICAO (e.g. A1B2C3)" maxlength="10">
+        <button onclick="checkStatus()">Check</button>
+      </div>
+      <div id="status-result" class="status-result" style="display:none;"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var selectedCountry = "{{ selected_country or '' }}";
+  var centerLat = {{ center.lat if center else 12.8797 }};
+  var centerLon = {{ center.lon if center else 121.774 }};
+  var currentScenarioId = 1;
+  var fetchTimer = null;
+  var leafletMap = null;
+  var markerElements = {};
+  var allFlights = [];
+
+  // Countries where all flights are always shown regardless of zoom
+  var noClutterCountries = ['Philippines', 'Australia'];
+
+  {% if selected_country %}
+  document.getElementById('stats-bar').style.display = 'flex';
+
+  leafletMap = L.map('map').setView([centerLat, centerLon], 6);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors'
+  }).addTo(leafletMap);
+
+  leafletMap.on('moveend', function() { clearTimeout(fetchTimer); fetchTimer = setTimeout(fetchFlights, 300); });
+  leafletMap.on('zoomend', function() {
+    clearTimeout(fetchTimer);
+    if (noClutterCountries.indexOf(selectedCountry) !== -1) {
+      updateMarkers(allFlights);
+    } else {
+      declutterAndRender(allFlights);
+    }
+    fetchTimer = setTimeout(fetchFlights, 300);
+  });
+
+  var isFetching = false;
+  setInterval(function() {
+    if (isFetching) return;
+    isFetching = true;
+    fetchFlights().finally(function() { isFetching = false; });
+  }, 5000);
+
+  fetchFlights();
+  loadScenario(1);
+  loadLogs();
+  {% endif %}
+
+  function fetchFlights() {
+    if (!leafletMap || !selectedCountry) return Promise.resolve();
+    var b = leafletMap.getBounds();
+    var params = 'lamin=' + b.getSouth() + '&lamax=' + b.getNorth() + '&lomin=' + b.getWest() + '&lomax=' + b.getEast() + '&country=' + encodeURIComponent(selectedCountry);
+    var dot = document.getElementById('loading-dot');
+    if (dot) dot.classList.add('active');
+    return fetch('/flights?' + params)
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (dot) dot.classList.remove('active');
+        if (data.flights && data.flights.length > 0) {
+          allFlights = data.flights;
+          updateStats(data.stats, data.flagged ? data.flagged.length : 0);
+          if (noClutterCountries.indexOf(selectedCountry) !== -1) {
+            updateMarkers(data.flights);
+          } else {
+            declutterAndRender(data.flights);
+          }
+          updateFlagged(data.flagged);
+          if (data.timestamp) {
+            var t = new Date(data.timestamp);
+            document.getElementById('last-updated').textContent = 'Updated ' + t.toLocaleTimeString();
+          }
+        }
+      })
+      .catch(function(e) {
+        if (dot) dot.classList.remove('active');
+        console.error('Flights fetch error:', e);
+      });
+  }
+
+  function declutterAndRender(flights) {
+    if (!leafletMap) return;
+
+    var zoom = leafletMap.getZoom();
+    var minPixelDistance = Math.max(3, 25 - (zoom * 2));
+
+    var visibleFlights = [];
+    var occupiedPixels = [];
+
+    flights.forEach(function(f) {
+      if (!f.lat || !f.lon) return;
+
+      var point = leafletMap.latLngToContainerPoint([f.lat, f.lon]);
+
+      var tooClose = false;
+      for (var i = 0; i < occupiedPixels.length; i++) {
+        var dx = point.x - occupiedPixels[i].x;
+        var dy = point.y - occupiedPixels[i].y;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist < minPixelDistance) {
+          tooClose = true;
+          break;
+        }
+      }
+
+      if (!tooClose) {
+        visibleFlights.push(f);
+        occupiedPixels.push(point);
+      }
+    });
+
+    updateMarkers(visibleFlights);
+  }
+
+  function updateStats(stats, anomalyCount) {
+    document.getElementById('stats-bar').style.display = 'flex';
+    document.getElementById('stat-total').textContent = stats.flight_count || 0;
+    document.getElementById('stat-airborne').textContent = stats.airborne || 0;
+    document.getElementById('stat-ground').textContent = stats.on_ground || 0;
+    document.getElementById('stat-anomalies').textContent = anomalyCount || 0;
+  }
+
+  function updateMarkers(flights) {
+    if (!leafletMap) return;
+
+    var newHexes = {};
+    flights.forEach(function(f) {
+      if (!f.lat || !f.lon) return;
+      newHexes[f.hex] = f;
+    });
+
+    Object.keys(markerElements).forEach(function(hex) {
+      if (!newHexes[hex]) {
+        leafletMap.removeLayer(markerElements[hex]);
+        delete markerElements[hex];
+      }
+    });
+
+    flights.forEach(function(f) {
+      if (!f.lat || !f.lon) return;
+      var heading = f.track || 0;
+      var icon = L.divIcon({
+        html: '<i class="fa fa-plane" style="color:#0A7EA4;font-size:16px;text-shadow:0 0 4px #000;transform:rotate(' + heading + 'deg);display:block;"></i>',
+        className: '',
+        iconSize: [20, 20],
+        iconAnchor: [10, 10]
+      });
+      if (markerElements[f.hex]) {
+        markerElements[f.hex].setLatLng([f.lat, f.lon]);
+        markerElements[f.hex].setIcon(icon);
+      } else {
+        var marker = L.marker([f.lat, f.lon], {icon: icon}).addTo(leafletMap);
+        marker.bindTooltip(f.flight || f.hex || 'Unknown');
+        (function(flight) {
+          marker.on('click', function() { selectFlight(flight); });
+        })(f);
+        markerElements[f.hex] = marker;
+      }
+    });
+  }
+
+  function selectFlight(f) {
+    var fields = [
+      ['ICAO',      f.hex || 'N/A'],
+      ['Callsign',  f.flight || 'N/A'],
+      ['Latitude',  f.lat ? f.lat.toFixed(4) : 'N/A'],
+      ['Longitude', f.lon ? f.lon.toFixed(4) : 'N/A'],
+      ['Altitude',  f.alt_baro ? f.alt_baro + ' ft' : 'N/A'],
+      ['Speed',     f.gs ? f.gs + ' kts' : 'N/A'],
+      ['Heading',   f.track ? f.track + '°' : 'N/A'],
+      ['Status',    f.ground ? 'On Ground' : 'Airborne']
+    ];
+    var html = '';
+    fields.forEach(function(row) {
+      html += '<div class="field-row"><span class="field-label">' + row[0] + '</span><span class="field-value">' + row[1] + '</span></div>';
+    });
+    document.getElementById('flight-details').innerHTML = html;
+    logFlightClick(f);
+  }
+
+  function logFlightClick(f) {
+    fetch('/log/flight', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ hex: f.hex, flight: f.flight, lat: f.lat, lon: f.lon, alt_baro: f.alt_baro, gs: f.gs, track: f.track, ground: f.ground, country: selectedCountry })
+    }).then(function() { loadLogs(); });
+  }
+
+  function updateFlagged(flagged) {
+    var el = document.getElementById('flagged-list');
+    if (!flagged || flagged.length === 0) {
+      el.innerHTML = '<div class="empty-panel">No anomalies detected.</div>';
+      return;
+    }
+    var html = '';
+    flagged.forEach(function(f) {
+      html += '<div class="flagged-item"><div class="reason">' + f.reason + '</div><div class="detail">' + (f.callsign || f.icao) + ' — ' + f.value + '</div></div>';
+    });
+    el.innerHTML = html;
+  }
+
+  function loadLogs() {
+    fetch('/logs/flights')
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var el = document.getElementById('log-list');
+        if (!data || data.length === 0) {
+          el.innerHTML = '<div class="empty-panel">No flights clicked yet.</div>';
+          return;
+        }
+        var html = '';
+        data.slice(0, 10).forEach(function(log) {
+          html += '<div class="log-item"><div class="log-icao">' + log.icao + ' — ' + (log.callsign || 'Unknown') + '</div><div class="log-detail">' + log.altitude + ' ft | ' + log.speed + ' kts | ' + log.country + '</div><div class="log-detail">' + log.timestamp.substring(0,19).replace('T',' ') + '</div></div>';
+        });
+        el.innerHTML = html;
+      });
+  }
+
+  function clearLogs() {
+    fetch('/logs/clear', {method: 'POST'}).then(function() { loadLogs(); });
+  }
+
+  function checkStatus() {
+    var icao = document.getElementById('icao-input').value.trim().toUpperCase();
+    if (!icao) return;
+    var el = document.getElementById('status-result');
+    el.style.display = 'block';
+    el.textContent = 'Checking...';
+    fetch('/status?icao=' + icao)
+      .then(function(r) { return r.json(); })
+      .then(function(data) { el.textContent = data.message || data.status; });
+  }
+
+  function loadScenario(id) {
+    fetch('/scenario?id=' + id)
+      .then(function(r) { return r.json(); })
+      .then(function(s) {
+        if (!s || !s.title) return;
+        currentScenarioId = s.id;
+        var html = '<div class="scenario-box"><div class="scenario-title">' + s.title + '</div><div class="scenario-desc">' + s.description + '</div><div class="scenario-choices">';
+        s.choices.forEach(function(c) {
+          html += '<button class="choice-btn" onclick="evaluateChoice(\'' + c.replace(/'/g, "\\'") + '\')">' + c + '</button>';
+        });
+        html += '</div><div id="scenario-feedback"></div></div>';
+        document.getElementById('scenario-box').innerHTML = html;
+      });
+  }
+
+  function evaluateChoice(choice) {
+    fetch('/scenario/evaluate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: currentScenarioId, choice: choice})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var fb = document.getElementById('scenario-feedback');
+      fb.className = 'scenario-feedback ' + (data.result === 'correct' ? 'feedback-correct' : 'feedback-incorrect');
+      fb.innerHTML = data.message + '<button class="next-btn" onclick="loadScenario(' + (currentScenarioId % 5 + 1) + ')">Next Scenario</button>';
+    });
+  }
+</script>
+
+</body>
+</html>
